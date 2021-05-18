@@ -5,7 +5,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "freertos/semphr.h"
-
+#include "gpio.h"
 #include "wifi.h"
 #include "mqtt.h"
 
@@ -26,17 +26,21 @@ void conectadoWifi(void * params)
 
 void trataComunicacaoComServidor(void * params)
 {
-  char mensagem[50];
   if(xSemaphoreTake(conexaoMQTTSemaphore, portMAX_DELAY))
   {
-    while(true)
-    {
-       float temperatura = 20.0 + (float)rand()/(float)(RAND_MAX/10.0);
-       sprintf(mensagem, "temperatura1: %f", temperatura);
-       mqtt_envia_mensagem("hagoromo34/sub", mensagem);
-       vTaskDelay(3000 / portTICK_PERIOD_MS);
-    }
+       register_device();
+       
   }
+  xSemaphoreGive(conexaoMQTTSemaphore);
+}
+
+void initRegistration(){
+    if(xSemaphoreTake(conexaoMQTTSemaphore, portMAX_DELAY))
+  {
+       register_device();
+       
+  }
+  xSemaphoreGive(conexaoMQTTSemaphore);
 }
 
 void app_main(void)
@@ -52,7 +56,8 @@ void app_main(void)
     conexaoWifiSemaphore = xSemaphoreCreateBinary();
     conexaoMQTTSemaphore = xSemaphoreCreateBinary();
     wifi_start();
-
+    init_gpio();
     xTaskCreate(&conectadoWifi,  "Conexão ao MQTT", 4096, NULL, 1, NULL);
-    xTaskCreate(&trataComunicacaoComServidor, "Comunicação com Broker", 4096, NULL, 1, NULL);
+    initRegistration();
+    //xTaskCreate(&trataComunicacaoComServidor, "Comunicação com Broker", 4096, NULL, 1, NULL);
 }

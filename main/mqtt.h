@@ -4,5 +4,5 @@
 void mqtt_start();
 
 void mqtt_envia_mensagem(char * topico, char * mensagem);
-
+void register_device();
 #endif

@@ -17,24 +17,38 @@
 
 #include "esp_log.h"
 #include "mqtt_client.h"
+#include "gpio.h"
 
 #include "mqtt.h"
 
+#include "cJSON.h"
+
 #define TAG "MQTT"
+
+#define MATRICULA "170017885"
 
 extern xSemaphoreHandle conexaoMQTTSemaphore;
 esp_mqtt_client_handle_t client;
 
+
+void handle_received_message(char *message){
+
+    cJSON *messageJSON = cJSON_Parse(message);
+    char *command = cJSON_GetObjectItem(messageJSON, "command")->valuestring;
+    if(strcmp(command, "toggle_device") == 0){
+        toggle_device();
+    }
+
+}
+
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
     
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             xSemaphoreGive(conexaoMQTTSemaphore);
-            msg_id = esp_mqtt_client_subscribe(client, "servidor/resposta", 0);
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -51,8 +65,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
             break;
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-            printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-            printf("DATA=%.*s\r\n", event->data_len, event->data);
+            handle_received_message(event->data);
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -83,4 +96,31 @@ void mqtt_envia_mensagem(char * topico, char * mensagem)
 {
     int message_id = esp_mqtt_client_publish(client, topico, mensagem, 0, 1, 0);
     ESP_LOGI(TAG, "Mesnagem enviada, ID: %d", message_id);
+
 }
+
+char *get_my_id(){
+	uint8_t baseMac[6] = {0};
+	esp_efuse_mac_get_default (baseMac);
+    char *baseMacChr = calloc(18, sizeof(char));
+	sprintf(baseMacChr, "%02X:%02X:%02X:%02X:%02X:%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+	return baseMacChr;
+}
+
+void register_device(){
+    
+    char *myID = get_my_id();
+
+    cJSON *registerMessageJSON = cJSON_CreateObject();
+    cJSON_AddStringToObject(registerMessageJSON, "id", myID);
+    cJSON_AddStringToObject(registerMessageJSON, "mode", "default");
+
+    char *registerMessage = cJSON_Print(registerMessageJSON);
+    
+    char mqtt_topic[50];
+    sprintf(mqtt_topic, "fse2020/%s/dispositivos/%s", MATRICULA, myID);
+
+    mqtt_envia_mensagem(mqtt_topic, registerMessage);
+    esp_mqtt_client_subscribe(client, mqtt_topic, 0);
+}
+
