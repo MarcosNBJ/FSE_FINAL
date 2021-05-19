@@ -20,6 +20,7 @@
 #include "gpio.h"
 
 #include "mqtt.h"
+#include "dht11.h"
 
 #include "cJSON.h"
 
@@ -31,6 +32,8 @@ extern xSemaphoreHandle conexaoMQTTSemaphore;
 esp_mqtt_client_handle_t client;
 
 
+char comodo[25];
+
 void handle_received_message(char *message){
 
     cJSON *messageJSON = cJSON_Parse(message);
@@ -38,7 +41,9 @@ void handle_received_message(char *message){
     if(strcmp(command, "toggle_device") == 0){
         toggle_device();
     }
-
+    else if(strcmp(command, "register") == 0){
+        strcpy(comodo, cJSON_GetObjectItem(messageJSON, "comodo")->valuestring);
+    }
 }
 
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
@@ -124,3 +129,61 @@ void register_device(){
     esp_mqtt_client_subscribe(client, mqtt_topic, 0);
 }
 
+void mqtt_publish_dht11(void *params)
+{
+    if (xSemaphoreTake(conexaoMQTTSemaphore, portMAX_DELAY))
+    {    
+
+        while (1)
+        {
+            struct dht11_reading dht11 = DHT11_read();
+            if (strlen(comodo) != 0 && dht11.status == 0)
+            {
+
+                char *myID = get_my_id();
+
+                cJSON *temperatureJSON = cJSON_CreateObject();
+                cJSON_AddStringToObject(temperatureJSON, "id", myID);
+                cJSON_AddNumberToObject(temperatureJSON, "temperature", dht11.temperature);
+                char *temperatureMessage = cJSON_Print(temperatureJSON);
+                
+                char temperatureTopic[60];
+                sprintf(temperatureTopic, "fse2020/%s/%s/temperatura", MATRICULA, comodo);
+
+                mqtt_envia_mensagem(temperatureTopic, temperatureMessage);
+
+
+                cJSON *humidityJSON = cJSON_CreateObject();
+                cJSON_AddStringToObject(humidityJSON, "id", myID);
+                cJSON_AddNumberToObject(humidityJSON, "humidity", dht11.humidity);
+                char *humidityMessage = cJSON_Print(humidityJSON);
+                
+                char humidityTopic[60];
+                sprintf(humidityTopic, "fse2020/%s/%s/umidade", MATRICULA, comodo);
+
+                mqtt_envia_mensagem(humidityTopic, humidityMessage);
+                
+            }
+
+            vTaskDelay(2000 / portTICK_PERIOD_MS);
+        }
+    }
+
+}
+
+void toggleSensorState(){
+     if (strlen(comodo) != 0)
+    {    
+        char *myID = get_my_id();
+        cJSON *sensorMessageJSON = cJSON_CreateObject();
+        cJSON_AddStringToObject(sensorMessageJSON, "id", myID);
+        cJSON_AddStringToObject(sensorMessageJSON, "event", "toggle_sensor");
+
+        char *sensorMessage = cJSON_Print(sensorMessageJSON);
+        
+        char eventTopic[60];
+        sprintf(eventTopic, "fse2020/%s/%s/estado", MATRICULA, comodo);
+
+        mqtt_envia_mensagem(eventTopic, sensorMessage);
+    }
+}
