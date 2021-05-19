@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "axios": "^0.21.1",
+    "bootstrap": "^5.0.0-beta3",
     "mqtt": "^4.2.6",
     "next": "10.2.0",
     "react": "17.0.2",
