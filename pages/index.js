@@ -9,6 +9,7 @@ export default function Home() {
   const [messages, setMessages] = useState([]);
   const [isPlaying, seIsPlaying] = useState(false);
   const [toRegister, setToRegister] = useState([]);
+  const [devices, setDevices] = useState({});
   const baseTopic = "fse2020/170017885";
 
   useEffect(() => {
@@ -24,11 +25,21 @@ export default function Home() {
     client.subscribe("fse2020/170017885/#");
     client.on("message", (topic, message) => {
       const messageJSON = JSON.parse(message.toString());
-      console.log(topic);
+      const deviceID = messageJSON.id;
       if (topic.split("/").slice(-2, -1)[0] == "dispositivos") {
-        if (!toRegister.includes(messageJSON.id)) {
-          setToRegister([...toRegister, messageJSON.id]);
+        if (deviceID && !Object.keys(devices).includes(deviceID)) {
+          setToRegister([...toRegister, deviceID]);
         }
+      } else if (topic.split("/").pop() == "temperatura") {
+        setDevices({
+          ...devices,
+          [deviceID]: { ...devices.deviceID, temp: messageJSON.temperature },
+        });
+      } else if (topic.split("/").pop() == "umidade") {
+        setDevices({
+          ...devices,
+          [deviceID]: { ...devices.deviceID, hum: messageJSON.humidity },
+        });
       }
     });
 
@@ -38,7 +49,7 @@ export default function Home() {
         client.end(client);
       }
     };
-  }, [toRegister]);
+  }, [toRegister, devices]);
 
   function sendMqttMsg(topic, content) {
     if (client) client.publish(topic, JSON.stringify(content));
@@ -53,6 +64,17 @@ export default function Home() {
       command: "register",
       comodo: comodo,
     });
+    setToRegister((toRegister) => toRegister.filter((id) => id !== deviceID));
+    setDevices({
+      ...devices,
+      [deviceID]: { comodo: comodo, temp: 0, hum: 0, sensor: 0, led: 0 },
+    });
+  };
+
+  const toggleDevice = (deviceID) => {
+    const toggleMessageTopic = `${baseTopic}/dispositivos/${deviceID}`;
+    const toggleMessage = { command: "toggle_device" };
+    sendMqttMsg(toggleMessageTopic, toggleMessage);
   };
 
   return (
@@ -61,14 +83,14 @@ export default function Home() {
         <h2>Dispositivos disponíveis para cadastro</h2>
 
         {toRegister.map((device) => (
-          <form onSubmit={handleRegistration}>
+          <form key={device} onSubmit={handleRegistration}>
             <p style={{ display: "inline-block", fontSize: "20px" }}>
               MAC: {device}
             </p>
             <input type="hidden" name="id" value={device} />
             <button
               className="btn btn-sm btn-success"
-              style={{ "margin-left": "10px" }}
+              style={{ marginLeft: "10px" }}
             >
               Cadastrar
             </button>
@@ -85,24 +107,50 @@ export default function Home() {
 
       <div style={{ paddingRight: "100px" }}>
         <h2>Dashboard</h2>
-        <div>
-          <h4 style={{ display: "inline-block" }}>Cozinha</h4>
-          <p>Temperatura: 25 Humindade: 40</p>
-          <p>
-            Lampada: <button className="btn btn-sm btn-success">Ligada</button>
-          </p>
-          <p>
-            Sensor:{" "}
-            <img
-              style={{ width: "20px" }}
-              src="https://upload.wikimedia.org/wikipedia/commons/1/13/Disc_Plain_red.svg"
-            ></img>
-            {/* <img
-              style={{ width: "20px" }}
-              src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Disc_Plain_green.svg/460px-Disc_Plain_green.svg.png"
-            ></img> */}
-          </p>
-        </div>
+
+        {Object.keys(devices).map((device, i) => (
+          <div>
+            <h4 style={{ display: "inline-block" }}>
+              {devices[device].comodo}
+            </h4>
+            <p>
+              Temperatura: {devices[device].temp} Humindade:
+              {devices[device].hum}
+            </p>
+            <p>
+              Lampada:
+              {devices[device].led ? (
+                <button
+                  onClick={() => toggleDevice(device)}
+                  className="btn btn-sm btn-success"
+                >
+                  Ligada
+                </button>
+              ) : (
+                <button
+                  onClick={() => toggleDevice(device)}
+                  className="btn btn-sm btn-danger"
+                >
+                  Desligada
+                </button>
+              )}
+            </p>
+            <p>
+              Sensor:
+              {devices[device].sensor ? (
+                <img
+                  style={{ width: "20px" }}
+                  src="https://upload.wikimedia.org/wikipedia/commons/1/13/Disc_Plain_red.svg"
+                ></img>
+              ) : (
+                <img
+                  style={{ width: "20px" }}
+                  src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Disc_Plain_green.svg/460px-Disc_Plain_green.svg.png"
+                ></img>
+              )}
+            </p>
+          </div>
+        ))}
       </div>
 
       <div>
