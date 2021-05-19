@@ -28,5 +28,5 @@ executar um `docker-compose up`. Após isso a aplicação estará acessível na 
 
 ## Video demonstrativo
 
-Abaxo segue um vídeo demonstrando o funcionamento do programa.
+Segue aqui um vídeo demonstrando o funcionamento do programa.
 https://youtu.be/1Sdm1R5LbRs
