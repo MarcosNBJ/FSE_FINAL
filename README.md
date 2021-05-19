@@ -27,3 +27,6 @@ Caso você não tenha o yarn mas tenha `docker` tudo bem também. Basta ir até 
 executar um `docker-compose up`. Após isso a aplicação estará acessível na porta 3000 do seu localhost
 
 ## Video demonstrativo
+
+Abaxo segue um vídeo demonstrando o funcionamento do programa.
+https://youtu.be/1Sdm1R5LbRs
