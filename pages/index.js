@@ -6,11 +6,11 @@ import Sound from "react-sound";
 var client;
 
 export default function Home() {
-  const [messages, setMessages] = useState([]);
   const [isPlaying, seIsPlaying] = useState(false);
   const [toRegister, setToRegister] = useState([]);
   const [devices, setDevices] = useState({});
   const baseTopic = "fse2020/170017885";
+  const [alarm, setAlarm] = useState(false);
 
   useEffect(() => {
     client = mqtt.connect(
@@ -24,6 +24,7 @@ export default function Home() {
 
     client.subscribe("fse2020/170017885/#");
     client.on("message", (topic, message) => {
+      //console.log(message.toString());
       const messageJSON = JSON.parse(message.toString());
       const deviceID = messageJSON.id;
       if (topic.split("/").slice(-2, -1)[0] == "dispositivos") {
@@ -31,50 +32,77 @@ export default function Home() {
           setToRegister([...toRegister, deviceID]);
         }
       } else if (topic.split("/").pop() == "temperatura") {
-        setDevices({
-          ...devices,
-          [deviceID]: { ...devices.deviceID, temp: messageJSON.temperature },
-        });
+        setDevices((prevState) => ({
+          ...prevState,
+          [deviceID]: { ...prevState[deviceID], temp: messageJSON.temperature },
+        }));
       } else if (topic.split("/").pop() == "umidade") {
-        setDevices({
-          ...devices,
-          [deviceID]: { ...devices.deviceID, hum: messageJSON.humidity },
-        });
+        setDevices((prevState) => ({
+          ...prevState,
+          [deviceID]: { ...prevState[deviceID], hum: messageJSON.humidity },
+        }));
+      } else if (topic.split("/").pop() == "estado") {
+        setDevices((prevState) => ({
+          ...prevState,
+          [deviceID]: {
+            ...prevState[deviceID],
+            sensor: !prevState[deviceID].sensor,
+          },
+        }));
+        seIsPlaying(true);
+        axios.get(`api/logger?device=${deviceID}&action=alarm`);
       }
     });
 
     return () => {
       if (client) {
-        client.unsubscribe("hagoromo34");
         client.end(client);
       }
     };
-  }, [toRegister, devices]);
+  }, []);
+
+  useEffect(() => {
+    if (!alarm && isPlaying) seIsPlaying(false);
+  }, [alarm, isPlaying]);
 
   function sendMqttMsg(topic, content) {
     if (client) client.publish(topic, JSON.stringify(content));
-    //axios.get("api/hello?device=asd&action=activate");
   }
 
   const handleRegistration = (event) => {
     event.preventDefault();
     const comodo = event.target.comodo.value;
     const deviceID = event.target.id.value;
+    const led_name = event.target.led_name.value;
     sendMqttMsg(`${baseTopic}/dispositivos/${deviceID}`, {
       command: "register",
       comodo: comodo,
     });
+    axios.get(`api/logger?device=${deviceID}&action=register`);
     setToRegister((toRegister) => toRegister.filter((id) => id !== deviceID));
-    setDevices({
-      ...devices,
-      [deviceID]: { comodo: comodo, temp: 0, hum: 0, sensor: 0, led: 0 },
-    });
+    setDevices((prevState) => ({
+      ...prevState,
+      [deviceID]: {
+        comodo: comodo,
+        temp: 0,
+        hum: 0,
+        sensor: 0,
+        led: 0,
+        led_name: led_name,
+      },
+    }));
   };
 
   const toggleDevice = (deviceID) => {
     const toggleMessageTopic = `${baseTopic}/dispositivos/${deviceID}`;
     const toggleMessage = { command: "toggle_device" };
     sendMqttMsg(toggleMessageTopic, toggleMessage);
+    const currentState = devices[deviceID].led;
+    setDevices((prevState) => ({
+      ...prevState,
+      [deviceID]: { ...prevState[deviceID], led: !currentState },
+    }));
+    axios.get(`api/logger?device=${deviceID}&action=activate_led`);
   };
 
   return (
@@ -101,6 +129,13 @@ export default function Home() {
               className="form-control"
               placeholder="Comodo do dispositivo"
             />
+            <input
+              name="led_name"
+              style={{ width: "300px" }}
+              type="text"
+              className="form-control"
+              placeholder="Dispositivo controlado"
+            />
           </form>
         ))}
       </div>
@@ -109,7 +144,7 @@ export default function Home() {
         <h2>Dashboard</h2>
 
         {Object.keys(devices).map((device, i) => (
-          <div>
+          <div key={device}>
             <h4 style={{ display: "inline-block" }}>
               {devices[device].comodo}
             </h4>
@@ -118,7 +153,7 @@ export default function Home() {
               {devices[device].hum}
             </p>
             <p>
-              Lampada:
+              {devices[device].led_name}
               {devices[device].led ? (
                 <button
                   onClick={() => toggleDevice(device)}
@@ -140,12 +175,12 @@ export default function Home() {
               {devices[device].sensor ? (
                 <img
                   style={{ width: "20px" }}
-                  src="https://upload.wikimedia.org/wikipedia/commons/1/13/Disc_Plain_red.svg"
+                  src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Disc_Plain_green.svg/460px-Disc_Plain_green.svg.png"
                 ></img>
               ) : (
                 <img
                   style={{ width: "20px" }}
-                  src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Disc_Plain_green.svg/460px-Disc_Plain_green.svg.png"
+                  src="https://upload.wikimedia.org/wikipedia/commons/1/13/Disc_Plain_red.svg"
                 ></img>
               )}
             </p>
@@ -155,25 +190,28 @@ export default function Home() {
 
       <div>
         <h2>Alarme</h2>
+        {alarm ? (
+          <button
+            onClick={() => setAlarm(false)}
+            className="btn btn-sm btn-success"
+          >
+            Armado
+          </button>
+        ) : (
+          <button
+            onClick={() => setAlarm(true)}
+            className="btn btn-sm btn-danger"
+          >
+            Desarmado
+          </button>
+        )}
       </div>
-
-      {/* <button
-        title={"Ligar"}
-        onClick={() => sendMqttMsg({ device: "foo", action: "bar" })}
-      >
-        Enviar
-      </button>
-      <button onClick={() => seIsPlaying(!isPlaying)}> Alarm </button>
-
-      {messages.map((message) => (
-        <p>{message}</p>
-      ))}
 
       <Sound
         url="alarm.mp3"
         playStatus={isPlaying ? Sound.status.PLAYING : Sound.status.STOPPED}
-        loop="true"
-      /> */}
+        loop={true}
+      />
     </div>
   );
 }
